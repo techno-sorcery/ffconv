@@ -5,4 +5,4 @@ ffconv is a simple front-end for ffmpeg, written in Bash. Its simple, easy-to-re
 ## Installation
 To run the script, you need bash, find, and (of course) ffmpeg.
 
-Just download ffconv.sh, make it executable (if not already) with "sudo chmod +x ffconv.sh", and move it to your .local/bin folder.
+Just download "ffconv", make it executable (if not already) with "sudo chmod +x ffconv.sh", and move it to your .local/bin folder.
