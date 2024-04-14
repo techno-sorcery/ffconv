@@ -1,0 +1,215 @@
+#!/bin/bash
+
+# ffmpeg conv front-end
+# Hayden Buscher, 2024
+#
+# Sola Deo gloria
+
+
+# Global vars
+CODEC=""
+DEL=false
+ENCODER=""
+EXT_IN=""
+EXT_OUT=""
+PATH_IN=""
+PATH_OUT=""
+QUALITY=""
+RECURSE="-maxdepth 1"
+
+HELP_MSG="Try 'ffconv -h' for more info"
+
+
+# Display help info
+help_info() {
+    echo -e "Usage: ffconv [OPTIONS...] [INPUT PATH] [INPUT EXTENSION] [OUTPUT CODEC] "
+    echo -e " Convert file(s) in path matching input extension, using output codec"
+    echo -e " Output codec isn't required if using both a custom encoder and output extension\n"
+    echo -e "Options:"
+    echo -e " -e, --encoder=ENCODER\tSelect a custom encoder for operation, uses defaults otherwise"
+    echo -e " -o, --output=EXTENSION\tSelect a custom output extension, uses defaults otherwise"
+    echo -e ""
+    echo -e " -b, --bitrate=RATE\t\tLossy; Output bitrate, uses ffmpeg defaults if not specified"
+    echo -e " -c, --compress=LEVEL\tLossless; Use variable bitrate encoding with specified quality"
+    echo -e " -v, --vbr=QUALITY\t\tLossy; Use variable bitrate encoding with specified quality"
+    echo -e ""
+    echo -e " -d, --del\t\t\t\tDelete input files when done"
+    echo -e " -h, --help\t\t\t\tDisplay help info"
+    echo -e " -p, --path=PATH\t\tStore output to custom path instead of same location as input"
+    echo -e " -r, --recursive\t\tRecursively search folders in path for files"
+}
+
+
+# Check if option parameter is empty
+check_empty() {
+    if [[ ${2:0:1} == '-' || -z $2 ]] ; then
+        echo "An argument is required for '$1'"
+        echo $HELP_MSG
+        exit 1
+    fi
+}
+
+
+# Get default encoder and extension
+codecs() {
+    TMP_ENC=""
+    TMP_EXT=""
+
+    # Remove . from codec
+    if [[ ${CODEC:0:1} == '.' ]] ; then
+        CODEC=${CODEC:1}
+    fi
+
+    # Select encoder and extension based on codec
+    case $CODEC in
+        ogg | opus )    TMP_ENC="libopus";        TMP_EXT=".ogg";;
+        mp3 | mpeg3 )   TMP_ENC="libmp3lame";     TMP_EXT=".mp3";;
+        flac )          TMP_ENC="flac";           TMP_EXT=".flac";;
+        alac )          TMP_ENC="alac";           TMP_EXT=".m4a";;
+        aac )           TMP_ENC="aac";            TMP_EXT=".m4a";;
+        pcm | wav )     TMP_ENC="pcm_u16le";      TMP_EXT=".wav";;
+
+        # Codec not found
+        * ) 
+            if [[ -z $EXT_OUT || -z $ENCODER ]] ; then
+                echo "Invalid codec '$CODEC'"
+                echo $HELP_MSG
+                exit 1
+            fi
+    esac
+
+    # Set output extension if not specified
+    if [[ -z $EXT_OUT ]] ; then
+        EXT_OUT=$TMP_EXT
+    fi
+
+    # Set encoder if not specified
+    if [[ -z $ENCODER ]] ; then
+        ENCODER=$TMP_ENC
+    fi
+}
+
+
+# Parse passed params
+parse_params() {
+
+    # Parse options
+    while [[ "$#" -ge 0 ]] ; do
+        case $1 in
+
+            # Output bitrate
+            -b | --bitrate )
+                check_empty $1 $2
+                QUALITY="-b:a $2"
+                shift 2
+            ;;
+            
+            # Output compression level
+            -c | --compression )
+                check_empty $1 $2
+                QUALITY="-compression_level $2"
+                shift 2
+            ;;
+
+            # Delete old files
+            -d | --del )
+                DEL=true
+                shift
+            ;;
+
+            # Custom encoder
+            -e | --encoder )
+                check_empty $1 $2
+                ENCODER=$2
+                shift 2
+            ;;
+
+            # Display help info
+            -h | --help )
+                help_info
+                exit 0
+            ;;
+
+            # Custom output extension
+            -o | --output )
+                check_empty $1 $2
+                EXT_OUT=$2
+                shift 2
+            ;;
+
+            # Custom output path
+            -p | --path )
+                check_empty $1 $2
+                PATH_OUT=$2
+                shift 2
+            ;;
+
+            # Recursively search
+            -r | --recursive )
+                RECURSE=""
+                shift
+            ;;
+
+            # VBR encoding
+            -v | --vbr )
+                check_empty $1 $2
+                QUALITY="-q:a $2 "
+                shift 2
+            ;;
+
+            # Other
+            * )
+                # Invalid option
+                if [[ ${1:0:1} == "-" ]] ; then
+                    echo "Invalid option '$1'"
+                    echo $HELP_MSG
+                    exit 1
+                fi
+
+                # Positional params
+                if [[ $# -lt 2 ]] ; then
+                    echo "Insufficient parameters"
+                    echo $HELP_MSG
+                    exit 1
+                fi
+
+                PATH_IN=$1
+                EXT_IN=$2
+                CODEC=$3
+
+                # Add . to EXT_IN
+                if [[ ${EXT_IN:0:1} != "." ]] ; then
+                    EXT_IN=.$EXT_IN
+                fi
+
+                return
+            ;;
+        esac
+    done
+}
+
+
+# Convert music files
+convert() { 
+
+    # Loop through files
+    for FILE in $(find $PATH_IN $RECURSE -name "*.flac") ; do
+        SAVENAME=${FILE%$EXT_IN}
+        ffmpeg -i $FILE -codec:a $ENCODER $QUALITY $SAVENAME$EXT_OUT
+
+        # Delete old files
+        if $DEL ; then
+            rm $FILE
+        fi
+    done
+}
+
+
+# Main function
+main() {
+    parse_params $@
+    codecs
+    convert
+}
+
+main $@
